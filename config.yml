@@ -35,6 +35,17 @@ pipeline:
 - name: FallbackClassifier
   threshold: 0.7
 policies:
+- name: customcomponents.custom_policy.ButtonPolicy
+  delete_entities:  True,  # delete entities from "inform" or other alternate intents
+  execute_noop_action: False
+  noop_action_name:  "action_noop"
+  use_default_intents:  True
+  intent_inform_ordinal_name:  "inform_#_ordinal"
+  max_numerical_intents: 6
+  intent_inform_left_name:  "inform_links"
+  intent_inform_right_name:  "inform_rechts"
+  intent_inform_last_name:  "inform_letzte"
+  intent_inform_middle_name:  "inform_mitte"
 - name: RulePolicy
   core_fallback_threshold: 0.3
   core_fallback_action_name: "action_default_fallback"

@@ -1,0 +1,75 @@
+version: '2.0'
+nlu:
+  - intent: inform_1_ordinal
+    examples: |
+      - the first
+      - first
+      - the 1st
+      - 1st
+      - the first option
+      - top
+      - the former
+  - intent: inform_2_ordinal
+    examples: |
+      - the second
+      - second
+      - the 2nd
+      - 2nd
+      - the second option
+  - intent: inform_3_ordinal
+    examples: |
+      - the third
+      - third
+      - the 3rd
+      - 3rd
+      - the third option
+  - intent: inform_4_ordinal
+    examples: |
+      - the fourth
+      - fourth
+      - the 4th
+      - 4th
+      - the fourth option
+  - intent: inform_5_ordinal
+    examples: |
+      - the fifth
+      - fifth
+      - the 5th
+      - 5th
+      - the fifth option
+  - intent: inform_6_ordinal
+    examples: |
+      - the sixth
+      - sixth
+      - the 6th
+      - 6th
+      - the sixth option
+  - intent: inform_links
+    examples: |
+      - the left
+      - left
+      - leftmost
+      - left hand
+      - lefthand
+      - left option
+  - intent: inform_rechts
+    examples: |
+      - the right
+      - on the right
+      - right
+      - rightmost
+      - right hand
+      - righthand
+  - intent: inform_mitte
+    examples: |
+      - the one in the middle
+      - middle option
+      - center
+      - center option
+  - intent: inform_letzte
+    examples: |
+      - last
+      - least
+      - the last
+      - the last option
+      - the latter

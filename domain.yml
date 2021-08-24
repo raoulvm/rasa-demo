@@ -5,6 +5,16 @@ session_config:
   session_expiration_time: 480
   carry_over_slots_to_new_session: true
 intents:
+- inform_1_ordinal
+- inform_2_ordinal
+- inform_3_ordinal
+- inform_4_ordinal
+- inform_5_ordinal
+- inform_6_ordinal
+- inform_links
+- inform_rechts
+- inform_letzte
+- inform_mitte
 - affirm
 - ask_how_contribute
 - ask_question_in_forum
