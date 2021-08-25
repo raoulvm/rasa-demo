@@ -67,7 +67,7 @@ def extract_b_i_e_t(
         ]
         return buttons, intent, entities, text, disabled
     else:
-        logger.info("Button Intents are disabled")
+        logger.debug("Button Intents are disabled")
         return [], [], [], "", True
 
 
@@ -429,13 +429,13 @@ class ButtonPolicy(Policy):
         #
 
         logger.debug(f"enter predict_action_probabilities")
-        logger.info(f"Tracker check")
+        logger.debug(f"Tracker check")
         for i, ev in enumerate(tracker.events):
-            logger.info(f"event #{i}")
-            logger.info(ev.as_dict())
-        logger.info(tracker.latest_message)
-        logger.info(tracker._latest_message_data())
-        logger.info("-------")
+            logger.debug(f"event #{i}")
+            logger.debug(ev.as_dict())
+        logger.debug(tracker.latest_message)
+        logger.debug(tracker._latest_message_data())
+        logger.debug("-------")
         done = False
 
         # check, skip = self._check_condition_for_button(tracker, domain)
@@ -457,7 +457,7 @@ class ButtonPolicy(Policy):
         logger.debug(entities)
         # check for extended meta data "button_intents"
         for n, b in enumerate(buttons):
-            logger.info(f"{n} Button {b}")
+            logger.debug(f"{n} Button {b}")
             button_intents = b.get("button_intents")
 
             if self.use_default_intents or not button_intents is None:
@@ -505,9 +505,9 @@ class ButtonPolicy(Policy):
                         utterance  #  change also last message data at `tracker.latest_message`
                     )
                     done = True
-                    # logger.info("------- AFTER CHANGE --------")
-                    # logger.info(tracker._latest_message_data())
-                    # logger.info("------- END OF CHANGE --------")
+                    # logger.debug("------- AFTER CHANGE --------")
+                    # logger.debug(tracker._latest_message_data())
+                    # logger.debug("------- END OF CHANGE --------")
                     break
 
         if self.execute_noop_action and done:
