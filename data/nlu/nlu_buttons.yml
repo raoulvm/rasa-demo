@@ -7,7 +7,6 @@ nlu:
       - the 1st
       - 1st
       - the first option
-      - top
       - the former
   - intent: inform_2_ordinal
     examples: |
