@@ -230,10 +230,16 @@ responses:
     buttons:
     - payload: /get_started_playground
       title: Try out Rasa in the online Rasa Playground
+      button_intents:
+        - enter_data:
+          - product: "playground"
     - payload: /install_rasa
       title: Install Rasa on your own computer
+      
     - payload: '/trigger_response_selector{{"retrieval_intent":"chitchat/ask_whatisrasa"}}'
       title: Find out more about Rasa
+      button_intents:
+        - how_to_get_started
   utter_playground_intro:
   - text: |-
         In the [Rasa Playground](https://rasa.com/docs/rasa/playground) you can
@@ -552,46 +558,50 @@ actions:
 - validate_sales_form
 forms:
   playground_form:
-    problem_description:
-    - type: from_text
+    required_slots:
+      problem_description:
+        - type: from_text
   suggestion_form:
-    suggestion:
-    - type: from_text
+    required_slots:
+      suggestion:
+      - type: from_text
   sales_form:
-    budget:
-    - entity: amount-of-money
-      type: from_entity
-    - entity: number
-      type: from_entity
-    - intent: enter_data
-      type: from_text
-    business_email:
-    - entity: email
-      type: from_entity
-    - intent: enter_data
-      type: from_text
-    company:
-    - entity: company
-      type: from_entity
-    - intent: enter_data
-      type: from_text
-    job_function:
-    - entity: job_function
-      type: from_entity
-    - intent: enter_data
-      type: from_text
-    person_name:
-    - entity: name
-      type: from_entity
-    - intent: enter_data
-      type: from_text
-    use_case:
-    - intent: enter_data
-      type: from_text
+    required_slots:
+      budget:
+      - entity: amount-of-money
+        type: from_entity
+      - entity: number
+        type: from_entity
+      - intent: enter_data
+        type: from_text
+      business_email:
+      - entity: email
+        type: from_entity
+      - intent: enter_data
+        type: from_text
+      company:
+      - entity: company
+        type: from_entity
+      - intent: enter_data
+        type: from_text
+      job_function:
+      - entity: job_function
+        type: from_entity
+      - intent: enter_data
+        type: from_text
+      person_name:
+      - entity: name
+        type: from_entity
+      - intent: enter_data
+        type: from_text
+      use_case:
+      - intent: enter_data
+        type: from_text
   subscribe_newsletter_form:
-    email:
-    - entity: email
-      type: from_entity
-    - intent: enter_data
-      type: from_text
+    required_slots:
+      email:
+      - entity: email
+        type: from_entity
+      - intent: enter_data
+        type: from_text
 e2e_actions: []

@@ -481,14 +481,15 @@ class ButtonPolicy(Policy):
                     payloadentities = {}
                     if "{" in payload:
                         # contains entities
-                        payloadentities = re.findall(r"{({.*?})}", payload)
+                        payloadentities = re.findall(r"{.*?}", payload)
                         if payloadentities:
                             payloadentities = ast.literal_eval(payloadentities[0])
                         else:
                             raise RasaException(f"Failed to parse {b.get('payload')} ")
+                        payload = payload[:payload.index('{')] # remove entities from intent name
                     entitylist = []
                     for k, v in payloadentities.items():
-                        entitylist.append({ENTITY_ATTRIBUTE_TYPE: k, ENTITY_ATTRIBUTE_VALUE: v})
+                        entitylist.append({ENTITY_ATTRIBUTE_TYPE: k, ENTITY_ATTRIBUTE_VALUE: v, 'processor':'button_policy'})
 
                     utterance = UserUttered(
                         text=text,

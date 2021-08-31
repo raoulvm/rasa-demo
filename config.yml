@@ -11,8 +11,10 @@ pipeline:
   min_ngram: 1
   max_ngram: 4
 - name: DIETClassifier
+  model_confidence: softmax
   epochs: 200
   ranking_length: 5
+  constrain_similarities: True
 - name: DucklingEntityExtractor
   url: http://duckling.rasa.com:8000
   dimensions:
@@ -21,14 +23,17 @@ pipeline:
   - amount-of-money
 - name: EntitySynonymMapper
 - name: ResponseSelector
+  constrain_similarities: True
   retrieval_intent: out_of_scope
   scale_loss: false
   epochs: 100
 - name: ResponseSelector
+  constrain_similarities: True
   retrieval_intent: faq
   scale_loss: false
   epochs: 100
 - name: ResponseSelector
+  constrain_similarities: True
   retrieval_intent: chitchat
   scale_loss: false
   epochs: 100
@@ -53,6 +58,8 @@ policies:
 - max_history: 6
   name: AugmentedMemoizationPolicy
 - name: TEDPolicy
+  constrain_similarities: True
+  model_confidence: softmax
   max_history: 10
   epochs: 20
   batch_size:
