@@ -489,7 +489,7 @@ class ButtonPolicy(Policy):
                         payload = payload[:payload.index('{')] # remove entities from intent name
                     entitylist = []
                     for k, v in payloadentities.items():
-                        entitylist.append({ENTITY_ATTRIBUTE_TYPE: k, ENTITY_ATTRIBUTE_VALUE: v, 'processor':'button_policy'})
+                        entitylist.append({ENTITY_ATTRIBUTE_TYPE: k, ENTITY_ATTRIBUTE_VALUE: v, 'processors':['button_policy']})
 
                     utterance = UserUttered(
                         text=text,

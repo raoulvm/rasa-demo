@@ -38,7 +38,8 @@ If multiple intents are given in the list, they are treated as OR condition.
 
 Entities are either checked for existence (if a list without values) or checked for specific values (if dict entries):
 
-intents = String oder Dict
+intents = String oder Dict  
+
 if dict:
 ```YAML
 button_intents:
