@@ -9,7 +9,9 @@ responses:
       title: Try out Rasa in the online Rasa Playground
       button_intents:
         - enter_data:
-          - product: "playground"
+          - product: 
+            - "playground"
+            - "online"
     - payload: /install_rasa
       title: Install Rasa on your own computer
       
