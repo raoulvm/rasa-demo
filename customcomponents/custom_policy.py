@@ -1,6 +1,6 @@
 import logging
 
-from typing import Any, List, Dict, Text, Optional, Set, Tuple, TYPE_CHECKING
+from typing import Any, List, Dict, Text, Optional, Set, Tuple, TYPE_CHECKING, Union
 
 
 import ast, re
@@ -167,7 +167,7 @@ class ButtonPolicy(Policy):
             optional_events=[],
         )
 
-    def _check_condition_for_button(self, tracker, domain) -> Tuple[bool, UserUttered, BotUttered]:
+    def _check_condition_for_button(self, tracker, domain) -> Tuple[bool, Union[UserUttered,None], Union[BotUttered, None], int]:
         """Check the condition if the uttonPolicy applies here
 
 
@@ -293,18 +293,10 @@ class ButtonPolicy(Policy):
             logger.debug(f"{n} Button {b}")
             button_intents = b.get("button_intents")
 
-            if self.use_default_intents or not button_intents is None:
-                ints: list = button_intents or []
-                if self._process_button(n, len(buttons), ints, intent[INTENT_NAME_KEY], entities):
-                    # found a matching intent!
-                    done = True
-                    # logger.debug("------- AFTER CHANGE --------")
-                    # logger.debug(tracker._latest_message_data())
-                    # logger.debug("------- END OF CHANGE --------")
-                    return self._predict_button_action(tracker, domain)
-        else:
-            # no prediction
-            return self._predict_nothing(tracker, domain)
+            if not button_intents is None:
+                return self._predict_button_action(tracker, domain)
+        # no prediction
+        return self._predict_nothing(tracker, domain)
 
     def _metadata(self) -> Dict[Text, Any]:
         return {
