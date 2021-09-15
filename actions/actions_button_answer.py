@@ -1,29 +1,38 @@
 # -*- coding: utf-8 -*-
-import logging, re
+import logging, re, ast, pprint
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Text, Optional, Tuple
 
 from rasa.shared.constants import DOCS_URL_RULES, INTENT_MESSAGE_PREFIX
-from rasa.shared.nlu.constants import INTENT_NAME_KEY, PREDICTED_CONFIDENCE_KEY, ENTITIES, ENTITY_ATTRIBUTE_VALUE, ENTITY_ATTRIBUTE_TYPE, INTENT, TEXT
+from rasa.shared.nlu.constants import (
+    INTENT_NAME_KEY,
+    PREDICTED_CONFIDENCE_KEY,
+    ENTITIES,
+    ENTITY_ATTRIBUTE_VALUE,
+    ENTITY_ATTRIBUTE_TYPE,
+    INTENT,
+    TEXT,
+)
 
 from rasa_sdk import Action, Tracker
 from rasa_sdk.types import DomainDict
-#from rasa_sdk.forms import FormValidationAction
+
+# from rasa_sdk.forms import FormValidationAction
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import (
     SlotSet,
     UserUtteranceReverted,
     ConversationPaused,
     EventType,
-    BotUttered, 
+    BotUttered,
     UserUttered,
 )
 
 from actions import config
 
 
-#USER_INTENT_OUT_OF_SCOPE = "out_of_scope"
+# USER_INTENT_OUT_OF_SCOPE = "out_of_scope"
 
 logger = logging.getLogger(__name__)
 
@@ -39,32 +48,34 @@ intent_inform_right_name: str = "inform_rechts"
 intent_inform_last_name: str = "inform_letzte"
 intent_inform_middle_name: str = "inform_mitte"
 
+
 def extract_b_i_e_t(
-    bot_utterance: EventType, user_utterance: EventType # TODO these are dicts in SDK
+    bot_utterance: EventType, user_utterance: EventType
 ) -> Tuple[list, object, list, str, bool]:
-    """[summary]
+    """Extracts buttons, intent, entities and TotallyDisabled from the last Bot utterance and the last user utterance
 
     Args:
-        bot_utterance (BotUttered): [description]
-        user_utterance (UserUttered): [description]
+        bot_utterance (EventType-BotUttered-Dict): The question asked by the bot that contained buttons
+        user_utterance (EventType-UserUttered-Dict): [description]
 
     Returns:
         Tuple[list, object, list, str, bool]: [description]
     """
-    t_3 = bot_utterance
-    buttons = t_3["data"].get("buttons")
-    disabled = not (not t_3["data"].get("button_intents_disabled", False))  # True'ish
-    if not disabled:
-        user = user_utterance
 
-        pdata = user.get("parse_data")  # parse data has been checked upfront!
+    buttons = bot_utterance["data"].get("buttons")
+    disabled = not (not bot_utterance["data"].get("button_intents_disabled", False))  # True'ish
+    if not disabled:
+
+        pdata = user_utterance.get("parse_data")  # parse data has been checked upfront!
 
         intent = pdata.get(INTENT)
         text = pdata.get(TEXT)
         entities = [
             {
                 e[ENTITY_ATTRIBUTE_TYPE].lower(): (
-                    e[ENTITY_ATTRIBUTE_VALUE].lower() if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str) else e[ENTITY_ATTRIBUTE_VALUE]
+                    e[ENTITY_ATTRIBUTE_VALUE].lower()
+                    if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str)
+                    else e[ENTITY_ATTRIBUTE_VALUE]
                 )
                 for e in pdata.get(ENTITIES)
             }
@@ -74,8 +85,8 @@ def extract_b_i_e_t(
         logger.debug("Button Intents are disabled")
         return [], [], [], "", True
 
-class ActionButtonAnswer(Action):
 
+class ActionButtonAnswer(Action):
     def __init__(self) -> None:
         super().__init__()
         self.use_default_intents: bool = use_default_intents
@@ -98,6 +109,10 @@ class ActionButtonAnswer(Action):
     ) -> List[EventType]:
 
         # process the last answer in the light of a button quetstion asked before
+        logger.debug("all events ---------------")
+        logger.debug(pprint.pformat(tracker.events))
+        logger.debug("--------------- APPLIED events ---------------")
+        logger.debug(pprint.pformat(tracker.applied_events()))
 
         return []
 
@@ -130,8 +145,6 @@ class ActionButtonAnswer(Action):
         logger.debug(f"_get_default_intents == {intents})")
         return intents
 
-
-
     def _is_name_in_intentlist_no_ent(self, intents: list, intentname: str) -> bool:
         """Returns True if the intentname is in the intentname is in the list of intents filtered for string types.
 
@@ -140,7 +153,7 @@ class ActionButtonAnswer(Action):
             intentname (str): literal name of the intent to search for
 
         Returns:
-            bool: 
+            bool:
         """
         # intents with no entity requirements
         logger.debug(f"enter _is_name_in_intentlist_no_ent({intents}, {intentname})")
@@ -158,7 +171,7 @@ class ActionButtonAnswer(Action):
         Args:
             buttonnumber (int): Button number in list (0..buttoncount-1)
             buttoncount (int): total number of buttons
-            intents (list): list of intents on the button (button_intents), can contain dict entries for 
+            intents (list): list of intents on the button (button_intents), can contain dict entries for
                             intents with entity requirements
             intentname (str): name of classified intent
             entities (list): recognized entities in the user utterance
@@ -227,7 +240,7 @@ class ActionButtonAnswer(Action):
                                 req_list_of_entities.remove(req_entity)
                                 logger.debug("FIT SINGLE VALUE")
                                 logger.debug(req_list_of_entities)
-                        elif isinstance(list(req_entity.values())[0], list): 
+                        elif isinstance(list(req_entity.values())[0], list):
                             # multiple possible values, iterate
                             logger.debug("iterate multiple values:")
                             for val in list(req_entity.values())[0]:
@@ -246,46 +259,56 @@ class ActionButtonAnswer(Action):
         logger.debug(f"exit _process_button == False (end of loop)")
         return False
 
-    def _modify_tracker(self, ):
-        pass
-                    # store the skipped events
-                    logger.debug(f"modify tracker")
-                    evt_store = [tracker.events.pop() for n in range(skips)]
-                    t_1 = tracker.events.pop()
-                    if not self.delete_entities:
-                        tracker.events.extend(evt_store)  # restore skipped slot events
+    def _modify_tracker(
+        self, tracker: Tracker, dispatcher: CollectingDispatcher
+    ) -> List[EventType]:
+        # store the skipped events
+        logger.debug(f"modify tracker")
+        evt_store = [tracker.events.pop() for n in range(skips)]
+        t_1 = tracker.events.pop()
+        if not self.delete_entities:
+            tracker.events.extend(evt_store)  # restore skipped slot events
 
-                    payload: str = b.get("payload")
-                    if not payload.startswith(INTENT_MESSAGE_PREFIX):
-                        raise RasaException("Button Payload is no literal intent")
-                    # remove intent prefix (default "/")
-                    payload = payload[len(INTENT_MESSAGE_PREFIX) :]
+        payload: str = b.get("payload")
+        if not payload.startswith(INTENT_MESSAGE_PREFIX):
+            raise ValueError("Button Payload is no literal intent")
+        # remove intent prefix (default "/")
+        payload = payload[len(INTENT_MESSAGE_PREFIX) :]
 
-                    #  fix intents with buttons as payloads!
-                    payloadentities = {}
-                    if "{" in payload:
-                        # contains entities
-                        payloadentities = re.findall(r"{.*?}", payload)
-                        if payloadentities:
-                            payloadentities = ast.literal_eval(payloadentities[0])
-                        else:
-                            raise RasaException(f"Failed to parse {b.get('payload')} ")
-                        payload = payload[:payload.index('{')] # remove entities from intent name
-                    entitylist = []
-                    for k, v in payloadentities.items():
-                        entitylist.append({ENTITY_ATTRIBUTE_TYPE: k, ENTITY_ATTRIBUTE_VALUE: v, 'processors':['button_policy']})
+        #  fix intents with buttons as payloads!
+        payloadentities = {}
+        if "{" in payload:
+            # contains entities
+            payloadentities = re.findall(r"{.*?}", payload)
+            if payloadentities:
+                payloadentities = ast.literal_eval(payloadentities[0])
+            else:
+                raise ValueError(f"Failed to parse {b.get('payload')} ")
+            payload = payload[: payload.index("{")]  # remove entities from intent name
+        entitylist = []
+        for k, v in payloadentities.items():
+            entitylist.append(
+                {
+                    ENTITY_ATTRIBUTE_TYPE: k,
+                    ENTITY_ATTRIBUTE_VALUE: v,
+                    "processors": ["button_policy"],
+                }
+            )
 
-                    utterance = UserUttered(
-                        text=text,
-                        intent={INTENT_NAME_KEY: payload, PREDICTED_CONFIDENCE_KEY: intent[PREDICTED_CONFIDENCE_KEY],},
-                        parse_data={
-                            **t_1.as_dict(),
-                            INTENT_NAME_KEY: payload,
-                            PREDICTED_CONFIDENCE_KEY: intent[PREDICTED_CONFIDENCE_KEY],
-                            ENTITIES: entitylist,  # replace entities
-                        },
-                    )
-                    tracker.events.append(utterance)
-                    tracker.latest_message = (
-                        utterance  #  change also last message data at `tracker.latest_message`
-                    )
+        utterance = UserUttered(
+            text=text,
+            intent={
+                INTENT_NAME_KEY: payload,
+                PREDICTED_CONFIDENCE_KEY: intent[PREDICTED_CONFIDENCE_KEY],
+            },
+            parse_data={
+                **t_1.as_dict(),
+                INTENT_NAME_KEY: payload,
+                PREDICTED_CONFIDENCE_KEY: intent[PREDICTED_CONFIDENCE_KEY],
+                ENTITIES: entitylist,  # replace entities
+            },
+        )
+        tracker.events.append(utterance)
+        tracker.latest_message = (
+            utterance  #  change also last message data at `tracker.latest_message`
+        )
