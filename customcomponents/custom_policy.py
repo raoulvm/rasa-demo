@@ -17,9 +17,11 @@ from rasa.shared.core.events import (
     UserUtteranceReverted,
     # Event,
 )
-#from rasa.core.featurizers.tracker_featurizers import TrackerFeaturizer
+
+# from rasa.core.featurizers.tracker_featurizers import TrackerFeaturizer
 from rasa.shared.nlu.interpreter import NaturalLanguageInterpreter
-#from rasa.core.policies.memoization import MemoizationPolicy
+
+# from rasa.core.policies.memoization import MemoizationPolicy
 from rasa.core.policies.policy import SupportedData, PolicyPrediction, Policy
 from rasa.shared.core.trackers import (
     DialogueStateTracker,
@@ -29,14 +31,21 @@ from rasa.shared.core.trackers import (
 from rasa.shared.core.generator import TrackerWithCachedStates
 from rasa.core.constants import DEFAULT_CORE_FALLBACK_THRESHOLD, RULE_POLICY_PRIORITY
 from rasa.shared.core.constants import (
-
-    ACTION_LISTEN_NAME, 
-
+    ACTION_LISTEN_NAME,
 )
 from rasa.shared.core.domain import InvalidDomain, State, Domain
-from rasa.shared.nlu.constants import INTENT_NAME_KEY, PREDICTED_CONFIDENCE_KEY, ENTITIES, ENTITY_ATTRIBUTE_VALUE, ENTITY_ATTRIBUTE_TYPE, INTENT, TEXT
-#import rasa.core.test
-#import rasa.core.training.training
+from rasa.shared.nlu.constants import (
+    INTENT_NAME_KEY,
+    PREDICTED_CONFIDENCE_KEY,
+    ENTITIES,
+    ENTITY_ATTRIBUTE_VALUE,
+    ENTITY_ATTRIBUTE_TYPE,
+    INTENT,
+    TEXT,
+)
+
+# import rasa.core.test
+# import rasa.core.training.training
 
 if TYPE_CHECKING:
     from rasa.core.policies.ensemble import PolicyEnsemble
@@ -60,7 +69,9 @@ def extract_b_i_e_t(
         entities = [
             {
                 e[ENTITY_ATTRIBUTE_TYPE].lower(): (
-                    e[ENTITY_ATTRIBUTE_VALUE].lower() if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str) else e[ENTITY_ATTRIBUTE_VALUE]
+                    e[ENTITY_ATTRIBUTE_VALUE].lower()
+                    if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str)
+                    else e[ENTITY_ATTRIBUTE_VALUE]
                 )
                 for e in pdata.get(ENTITIES)
             }
@@ -88,7 +99,8 @@ class ButtonPolicy(Policy):
         **kwargs,
     ):
         super().__init__(
-            priority=priority, **kwargs,
+            priority=priority,
+            **kwargs,
         )
         self.priority = priority
         self.delete_entities: bool = delete_entities
@@ -118,7 +130,8 @@ class ButtonPolicy(Policy):
         logger.debug(f"executed validate_against_domain")
         return None
 
-        if False: return InvalidDomain() # TODO enable that if intents not in domain
+        if False:
+            return InvalidDomain()  # TODO enable that if intents not in domain
 
     def train(
         self,
@@ -192,7 +205,9 @@ class ButtonPolicy(Policy):
             optional_events=[],
         )
 
-    def _check_condition_for_button2(self, tracker, domain) -> Tuple[bool, UserUttered, BotUttered]:
+    def _check_condition_for_button2(
+        self, tracker, domain
+    ) -> Tuple[bool, UserUttered, BotUttered, int]:
         """Check the condition if the uttonPolicy applies here
 
 
@@ -221,7 +236,7 @@ class ButtonPolicy(Policy):
                     return (False, None, None, 0)
             if (
                 isinstance(tracker.events[-2 - skip], ActionExecuted)
-                and tracker.events[-2 - skip].as_dict()['name'] == ACTION_LISTEN_NAME
+                and tracker.events[-2 - skip].as_dict()["name"] == ACTION_LISTEN_NAME
             ):
                 logger.debug(" action ok - last action was action_listen")
 
@@ -300,7 +315,7 @@ class ButtonPolicy(Policy):
             intentname (str): literal name of the intent to search for
 
         Returns:
-            bool: 
+            bool:
         """
         # intents with no entity requirements
         logger.debug(f"enter _is_name_in_intentlist_no_ent({intents}, {intentname})")
@@ -318,7 +333,7 @@ class ButtonPolicy(Policy):
         Args:
             buttonnumber (int): Button number in list (0..buttoncount-1)
             buttoncount (int): total number of buttons
-            intents (list): list of intents on the button (button_intents), can contain dict entries for 
+            intents (list): list of intents on the button (button_intents), can contain dict entries for
                             intents with entity requirements
             intentname (str): name of classified intent
             entities (list): recognized entities in the user utterance
@@ -368,7 +383,7 @@ class ButtonPolicy(Policy):
                         # single entity without value requirement
                         # just check if it there
                         logger.debug("no value required")
-                        if req_entity in entities.keys():
+                        if req_entity in [list(e.keys())[0] for e in entities]:
                             logger.debug("FIT NO VALUE")
                             # fit, remove requirement
                             req_list_of_entities.remove(req_entity)
@@ -387,10 +402,10 @@ class ButtonPolicy(Policy):
                                 req_list_of_entities.remove(req_entity)
                                 logger.debug("FIT SINGLE VALUE")
                                 logger.debug(req_list_of_entities)
-                        elif isinstance(list(req_entity.values())[0], list): 
+                        elif isinstance(list(req_entity.values())[0], list):
                             # multiple possible values, iterate
                             logger.debug("iterate multiple values:")
-                            for val in list(req_entity.values())[0]:
+                            for val in list(req_entity.values()):
                                 logger.debug(f"{req_ent_key}:{val}")
                                 if {req_ent_key: val} in entities:
                                     # fit, remove requirement
@@ -486,14 +501,23 @@ class ButtonPolicy(Policy):
                             payloadentities = ast.literal_eval(payloadentities[0])
                         else:
                             raise RasaException(f"Failed to parse {b.get('payload')} ")
-                        payload = payload[:payload.index('{')] # remove entities from intent name
+                        payload = payload[: payload.index("{")]  # remove entities from intent name
                     entitylist = []
                     for k, v in payloadentities.items():
-                        entitylist.append({ENTITY_ATTRIBUTE_TYPE: k, ENTITY_ATTRIBUTE_VALUE: v, 'processors':['button_policy']})
+                        entitylist.append(
+                            {
+                                ENTITY_ATTRIBUTE_TYPE: k,
+                                ENTITY_ATTRIBUTE_VALUE: v,
+                                "processors": ["button_policy"],
+                            }
+                        )
 
                     utterance = UserUttered(
                         text=text,
-                        intent={INTENT_NAME_KEY: payload, PREDICTED_CONFIDENCE_KEY: intent[PREDICTED_CONFIDENCE_KEY],},
+                        intent={
+                            INTENT_NAME_KEY: payload,
+                            PREDICTED_CONFIDENCE_KEY: intent[PREDICTED_CONFIDENCE_KEY],
+                        },
                         parse_data={
                             **t_1.as_dict(),
                             INTENT_NAME_KEY: payload,
