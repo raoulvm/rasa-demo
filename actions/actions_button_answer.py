@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import logging
+import logging, re
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Text, Optional, Tuple
@@ -21,20 +21,17 @@ from rasa_sdk.events import (
 )
 
 from actions import config
-from actions.api import community_events
-# from actions.api.algolia import AlgoliaAPI
-# from actions.api.discourse import DiscourseAPI
-# from actions.api.gdrive_service import GDriveService
-# from actions.api.mailchimp import MailChimpAPI
-# from actions.api.rasaxapi import RasaXAPI
 
-USER_INTENT_OUT_OF_SCOPE = "out_of_scope"
+
+#USER_INTENT_OUT_OF_SCOPE = "out_of_scope"
 
 logger = logging.getLogger(__name__)
 
 
 # defaults ==> make that read a file
-use_default_intents: bool = True,
+use_default_intents: bool = True
+delete_entities: bool = True  # delete entities from "inform" or other alternate intents
+
 intent_inform_ordinal_name: str = "inform_#_ordinal"
 max_numerical_intents: int = 6
 intent_inform_left_name: str = "inform_links"
@@ -43,13 +40,22 @@ intent_inform_last_name: str = "inform_letzte"
 intent_inform_middle_name: str = "inform_mitte"
 
 def extract_b_i_e_t(
-    bot_utterance: BotUttered, user_utterance: UserUttered # TODO these are dicts in SDK
+    bot_utterance: EventType, user_utterance: EventType # TODO these are dicts in SDK
 ) -> Tuple[list, object, list, str, bool]:
-    t_3 = bot_utterance.as_dict()
+    """[summary]
+
+    Args:
+        bot_utterance (BotUttered): [description]
+        user_utterance (UserUttered): [description]
+
+    Returns:
+        Tuple[list, object, list, str, bool]: [description]
+    """
+    t_3 = bot_utterance
     buttons = t_3["data"].get("buttons")
     disabled = not (not t_3["data"].get("button_intents_disabled", False))  # True'ish
     if not disabled:
-        user = user_utterance.as_dict()
+        user = user_utterance
 
         pdata = user.get("parse_data")  # parse data has been checked upfront!
 
@@ -73,6 +79,7 @@ class ActionButtonAnswer(Action):
     def __init__(self) -> None:
         super().__init__()
         self.use_default_intents: bool = use_default_intents
+        self.delete_entities: bool = delete_entities
         self.intent_inform_ordinal_name: str = intent_inform_ordinal_name
         self.max_numerical_intents: int = max_numerical_intents
         self.intent_inform_left_name: str = intent_inform_left_name

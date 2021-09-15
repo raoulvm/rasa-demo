@@ -75,32 +75,14 @@ class ButtonPolicy(Policy):
     def __init__(
         self,
         priority: int = RULE_POLICY_PRIORITY + 1,
-        delete_entities: bool = True,  # delete entities from "inform" or other alternate intents
-
         button_action_name: str = "action_process_button_answer",
-        # use_default_intents: bool = True,
-        # intent_inform_ordinal_name: str = "inform_#_ordinal",
-        # max_numerical_intents: int = 6,
-        # intent_inform_left_name: str = "inform_links",
-        # intent_inform_right_name: str = "inform_rechts",
-        # intent_inform_last_name: str = "inform_letzte",
-        # intent_inform_middle_name: str = "inform_mitte",
         **kwargs,
     ):
         super().__init__(
             priority=priority, **kwargs,
         )
         self.priority = priority
-        self.delete_entities: bool = delete_entities
-
         self.button_action_name: str = button_action_name
-        # self.use_default_intents: bool = use_default_intents
-        # self.intent_inform_ordinal_name: str = intent_inform_ordinal_name
-        # self.max_numerical_intents: int = max_numerical_intents
-        # self.intent_inform_left_name: str = intent_inform_left_name
-        # self.intent_inform_right_name: str = intent_inform_right_name
-        # self.intent_inform_last_name: str = intent_inform_last_name
-        # self.intent_inform_middle_name: str = intent_inform_middle_name
         self.params = {}
         for (k, i) in kwargs.items():
             self.params[k] = i
@@ -327,16 +309,8 @@ class ButtonPolicy(Policy):
     def _metadata(self) -> Dict[Text, Any]:
         return {
             "priority": self.priority,
-            "delete_entities": self.delete_entities,
-            "execute_noop_action": self.execute_noop_action,
-            "noop_action_name": self.button_action_name,
-            "use_default_intents": self.use_default_intents,
-            "intent_inform_ordinal_name": self.intent_inform_ordinal_name,
-            "max_numerical_intents": self.max_numerical_intents,
-            "intent_inform_left_name": self.intent_inform_left_name,
-            "intent_inform_right_name": self.intent_inform_right_name,
-            "intent_inform_last_name": self.intent_inform_last_name,
-            "intent_inform_middle_name": self.intent_inform_middle_name,
+            "button_action_name": self.button_action_name,
+
         }
 
     @classmethod
