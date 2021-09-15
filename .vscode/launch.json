@@ -5,6 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Rasa Run Actions",
+            "type": "python",
+            "request": "launch",
+            "module": "rasa",
+            "args": [
+                "run",
+                "actions",
+                "--debug"
+            ]
+        },
+        {
             "name": "Rasa Shell DEBUG",
             "type": "python",
             "request": "launch",
