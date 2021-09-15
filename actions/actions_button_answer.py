@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging, re, ast, pprint
 import json
-from datetime import datetime
+import time
 from typing import Any, Dict, List, Text, Optional, Tuple
 
 from rasa.shared.constants import DOCS_URL_RULES, INTENT_MESSAGE_PREFIX
@@ -16,13 +16,16 @@ from rasa.shared.nlu.constants import (
 )
 
 from rasa_sdk import Action, Tracker
+from rasa_sdk.interfaces import ACTION_LISTEN_NAME
 from rasa_sdk.types import DomainDict
 
 # from rasa_sdk.forms import FormValidationAction
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import (
+    ActionExecuted,
     SlotSet,
     UserUtteranceReverted,
+    ActionReverted,
     ConversationPaused,
     EventType,
     BotUttered,
@@ -51,39 +54,38 @@ intent_inform_middle_name: str = "inform_mitte"
 
 def extract_b_i_e_t(
     bot_utterance: EventType, user_utterance: EventType
-) -> Tuple[list, object, list, str, bool]:
-    """Extracts buttons, intent, entities and TotallyDisabled from the last Bot utterance and the last user utterance
+) -> Tuple[list, dict, dict, str, bool]:
+    """Extracts buttons, intent, entities, text and disabled from the last Bot utterance and the last user utterance
 
     Args:
         bot_utterance (EventType-BotUttered-Dict): The question asked by the bot that contained buttons
         user_utterance (EventType-UserUttered-Dict): [description]
 
     Returns:
-        Tuple[list, object, list, str, bool]: [description]
+        Tuple[list, dict, dict, str, bool]: buttons, intent, entities, text and disabled
     """
-
-    buttons = bot_utterance["data"].get("buttons")
-    disabled = not (not bot_utterance["data"].get("button_intents_disabled", False))  # True'ish
+    data: dict = bot_utterance.get("data", {})
+    buttons = data.get("buttons", [])
+    disabled = not (not data.get("button_intents_disabled", False))  # True'ish
     if not disabled:
 
-        pdata = user_utterance.get("parse_data")  # parse data has been checked upfront!
+        pdata = user_utterance.get("parse_data", {})  # parse data has been checked upfront!
 
-        intent = pdata.get(INTENT)
-        text = pdata.get(TEXT)
-        entities = [
-            {
-                e[ENTITY_ATTRIBUTE_TYPE].lower(): (
-                    e[ENTITY_ATTRIBUTE_VALUE].lower()
-                    if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str)
-                    else e[ENTITY_ATTRIBUTE_VALUE]
-                )
-                for e in pdata.get(ENTITIES)
-            }
-        ]
+        intent = pdata.get(INTENT, {})
+        text = pdata.get(TEXT, "")
+        entities = {
+            e[ENTITY_ATTRIBUTE_TYPE].lower(): (
+                e[ENTITY_ATTRIBUTE_VALUE].lower()
+                if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str)
+                else e[ENTITY_ATTRIBUTE_VALUE]
+            )
+            for e in pdata.get(ENTITIES, [])
+        }
+
         return buttons, intent, entities, text, disabled
     else:
         logger.debug("Button Intents are disabled")
-        return [], [], [], "", True
+        return [], {}, {}, "", True
 
 
 class ActionButtonAnswer(Action):
@@ -100,21 +102,6 @@ class ActionButtonAnswer(Action):
 
     def name(self) -> Text:
         return "action_process_button_answer"
-
-    def run(
-        self,
-        dispatcher: CollectingDispatcher,
-        tracker: Tracker,
-        domain: DomainDict,
-    ) -> List[EventType]:
-
-        # process the last answer in the light of a button quetstion asked before
-        logger.debug("all events ---------------")
-        logger.debug(pprint.pformat(tracker.events))
-        logger.debug("--------------- APPLIED events ---------------")
-        logger.debug(pprint.pformat(tracker.applied_events()))
-
-        return []
 
     def _get_default_intents(self, buttonnumber: int, buttoncount: int) -> list:
         """returns the default intents for a given button number, such as first, middle, last, etc.
@@ -164,7 +151,7 @@ class ActionButtonAnswer(Action):
         return intentname in [i for i in intents if isinstance(i, str)]
 
     def _process_button(
-        self, buttonnumber: int, buttoncount: int, intents: list, intentname: str, entities: list
+        self, buttonnumber: int, buttoncount: int, intents: list, intentname: str, entities: dict
     ) -> bool:
         """Check a button against the current classified intent (and it's entties, if required)
 
@@ -235,7 +222,10 @@ class ActionButtonAnswer(Action):
                             logger.debug("single value")
                             # one string as value
                             # format the same as in rasa entity list?!
-                            if req_entity in entities:
+                            if (
+                                req_entity[ENTITY_ATTRIBUTE_TYPE],
+                                req_entity[ENTITY_ATTRIBUTE_VALUE],
+                            ) in entities.items():
                                 # fit, remove requirement
                                 req_list_of_entities.remove(req_entity)
                                 logger.debug("FIT SINGLE VALUE")
@@ -243,9 +233,11 @@ class ActionButtonAnswer(Action):
                         elif isinstance(list(req_entity.values())[0], list):
                             # multiple possible values, iterate
                             logger.debug("iterate multiple values:")
-                            for val in list(req_entity.values())[0]:
+                            for val in list(req_entity.values())[
+                                0
+                            ]:  # Value of the first (and only) key
                                 logger.debug(f"{req_ent_key}:{val}")
-                                if {req_ent_key: val} in entities:
+                                if (req_ent_key, val) in entities.items():
                                     # fit, remove requirement
                                     req_list_of_entities.remove(req_entity)
                                     logger.debug("FIT FROM ITERATE")
@@ -259,17 +251,30 @@ class ActionButtonAnswer(Action):
         logger.debug(f"exit _process_button == False (end of loop)")
         return False
 
-    def _modify_tracker(
-        self, tracker: Tracker, dispatcher: CollectingDispatcher
+    def _create_events(
+        self,
+        tracker: Tracker,
+        dispatcher: CollectingDispatcher,
+        button: dict,
+        text: str,
+        orig_intent: dict,
+        user_utterance: EventType,
     ) -> List[EventType]:
         # store the skipped events
         logger.debug(f"modify tracker")
-        evt_store = [tracker.events.pop() for n in range(skips)]
-        t_1 = tracker.events.pop()
-        if not self.delete_entities:
-            tracker.events.extend(evt_store)  # restore skipped slot events
 
-        payload: str = b.get("payload")
+        # revert the user utterance
+        result = [
+            UserUtteranceReverted(timestamp=time.time()),
+            ActionExecuted(
+                ACTION_LISTEN_NAME,
+                policy="lied_about_the_policy",
+                confidence=1.0,
+                timestamp=time.time(),
+            ),
+        ]
+
+        payload: str = button.get("payload", "")
         if not payload.startswith(INTENT_MESSAGE_PREFIX):
             raise ValueError("Button Payload is no literal intent")
         # remove intent prefix (default "/")
@@ -283,7 +288,7 @@ class ActionButtonAnswer(Action):
             if payloadentities:
                 payloadentities = ast.literal_eval(payloadentities[0])
             else:
-                raise ValueError(f"Failed to parse {b.get('payload')} ")
+                raise ValueError(f"Failed to parse {button.get('payload')} ")
             payload = payload[: payload.index("{")]  # remove entities from intent name
         entitylist = []
         for k, v in payloadentities.items():
@@ -294,21 +299,71 @@ class ActionButtonAnswer(Action):
                     "processors": ["button_policy"],
                 }
             )
-
         utterance = UserUttered(
             text=text,
-            intent={
-                INTENT_NAME_KEY: payload,
-                PREDICTED_CONFIDENCE_KEY: intent[PREDICTED_CONFIDENCE_KEY],
-            },
             parse_data={
-                **t_1.as_dict(),
-                INTENT_NAME_KEY: payload,
-                PREDICTED_CONFIDENCE_KEY: intent[PREDICTED_CONFIDENCE_KEY],
+                # **user_utterance.get("parse_data",{}),
+                INTENT: {
+                    INTENT_NAME_KEY: payload,
+                    PREDICTED_CONFIDENCE_KEY: orig_intent[PREDICTED_CONFIDENCE_KEY],
+                },
                 ENTITIES: entitylist,  # replace entities
             },
+            input_channel=user_utterance.get("input_channel", ""),
+            timestamp=time.time(),
         )
-        tracker.events.append(utterance)
-        tracker.latest_message = (
-            utterance  #  change also last message data at `tracker.latest_message`
+        result.append(utterance)
+        # tracker.latest_message = (
+        #     utterance  #  change also last message data at `tracker.latest_message`
+        # )
+        return result
+
+    def run(
+        self,
+        dispatcher: CollectingDispatcher,
+        tracker: Tracker,
+        domain: DomainDict,
+    ) -> List[EventType]:
+
+        # process the last answer in the light of a button quetstion asked before
+        logger.debug("all events ---------------")
+        logger.debug(pprint.pformat(tracker.events, sort_dicts=False))
+        logger.debug("--------------- APPLIED events ---------------")
+        logger.debug(pprint.pformat(tracker.applied_events(), sort_dicts=False))
+
+        # if this run method is called, we know the button policy already has checked
+        # the basic conditions.
+
+        # get the last bot an duser utterances for button processing
+        user_utterance = tracker.get_last_event_for("user") or {}
+        bot_utterance = tracker.get_last_event_for("bot") or {}
+
+        buttons, intent, entities, text, disabled = extract_b_i_e_t(
+            bot_utterance=bot_utterance, user_utterance=user_utterance
         )
+        if disabled:
+            return []
+
+        # check for extended meta data "button_intents"
+        for n, b in enumerate(buttons):
+            logger.debug(f"{n} Button {b}")
+            button_intents: list = b.get("button_intents", [])
+            if self._process_button(
+                buttonnumber=n,
+                buttoncount=len(buttons),
+                intents=button_intents,
+                intentname=intent[INTENT_NAME_KEY],
+                entities=entities,
+            ):
+                # we got a match
+                # TODO create events and return them
+                return self._create_events(
+                    tracker,
+                    dispatcher,
+                    button=b,
+                    text=text,
+                    orig_intent=intent,
+                    user_utterance=user_utterance,
+                )
+
+        return []

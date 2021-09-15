@@ -1,4 +1,4 @@
-import logging
+import logging, pprint
 
 from typing import Any, List, Dict, Text, Optional, Set, Tuple, TYPE_CHECKING, Union
 
@@ -17,9 +17,11 @@ from rasa.shared.core.events import (
     UserUtteranceReverted,
     # Event,
 )
-#from rasa.core.featurizers.tracker_featurizers import TrackerFeaturizer
+
+# from rasa.core.featurizers.tracker_featurizers import TrackerFeaturizer
 from rasa.shared.nlu.interpreter import NaturalLanguageInterpreter
-#from rasa.core.policies.memoization import MemoizationPolicy
+
+# from rasa.core.policies.memoization import MemoizationPolicy
 from rasa.core.policies.policy import SupportedData, PolicyPrediction, Policy
 from rasa.shared.core.trackers import (
     DialogueStateTracker,
@@ -29,14 +31,21 @@ from rasa.shared.core.trackers import (
 from rasa.shared.core.generator import TrackerWithCachedStates
 from rasa.core.constants import DEFAULT_CORE_FALLBACK_THRESHOLD, RULE_POLICY_PRIORITY
 from rasa.shared.core.constants import (
-
-    ACTION_LISTEN_NAME, 
-
+    ACTION_LISTEN_NAME,
 )
 from rasa.shared.core.domain import InvalidDomain, State, Domain
-from rasa.shared.nlu.constants import INTENT_NAME_KEY, PREDICTED_CONFIDENCE_KEY, ENTITIES, ENTITY_ATTRIBUTE_VALUE, ENTITY_ATTRIBUTE_TYPE, INTENT, TEXT
-#import rasa.core.test
-#import rasa.core.training.training
+from rasa.shared.nlu.constants import (
+    INTENT_NAME_KEY,
+    PREDICTED_CONFIDENCE_KEY,
+    ENTITIES,
+    ENTITY_ATTRIBUTE_VALUE,
+    ENTITY_ATTRIBUTE_TYPE,
+    INTENT,
+    TEXT,
+)
+
+# import rasa.core.test
+# import rasa.core.training.training
 
 if TYPE_CHECKING:
     from rasa.core.policies.ensemble import PolicyEnsemble
@@ -46,29 +55,30 @@ logger = logging.getLogger(__name__)
 
 def extract_b_i_e_t(
     bot_utterance: BotUttered, user_utterance: UserUttered
-) -> Tuple[list, object, list, str, bool]:
+) -> Tuple[list, dict, dict, str, bool]:
     t_3 = bot_utterance.as_dict()
     buttons = t_3["data"].get("buttons")
     disabled = not (not t_3["data"].get("button_intents_disabled", False))  # True'ish
     if not disabled:
         user = user_utterance.as_dict()
 
-        pdata = user.get("parse_data")  # parse data has been checked upfront!
+        pdata = user.get("parse_data", {})  # parse data has been checked upfront!
 
-        intent = pdata.get(INTENT)
-        text = pdata.get(TEXT)
-        entities = [
-            {
-                e[ENTITY_ATTRIBUTE_TYPE].lower(): (
-                    e[ENTITY_ATTRIBUTE_VALUE].lower() if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str) else e[ENTITY_ATTRIBUTE_VALUE]
-                )
-                for e in pdata.get(ENTITIES)
-            }
-        ]
+        intent = pdata.get(INTENT, {})
+        text = pdata.get(TEXT, "")
+        entities = {
+            e[ENTITY_ATTRIBUTE_TYPE].lower(): (
+                e[ENTITY_ATTRIBUTE_VALUE].lower()
+                if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str)
+                else e[ENTITY_ATTRIBUTE_VALUE]
+            )
+            for e in pdata.get(ENTITIES, [])
+        }
+
         return buttons, intent, entities, text, disabled
     else:
         logger.debug("Button Intents are disabled")
-        return [], [], [], "", True
+        return [], {}, {}, "", True
 
 
 class ButtonPolicy(Policy):
@@ -79,7 +89,8 @@ class ButtonPolicy(Policy):
         **kwargs,
     ):
         super().__init__(
-            priority=priority, **kwargs,
+            priority=priority,
+            **kwargs,
         )
         self.priority = priority
         self.button_action_name: str = button_action_name
@@ -146,7 +157,9 @@ class ButtonPolicy(Policy):
             optional_events=[],
         )
 
-    def _predict_button_action(self, tracker: DialogueStateTracker, domain: Domain) -> PolicyPrediction:
+    def _predict_button_action(
+        self, tracker: DialogueStateTracker, domain: Domain
+    ) -> PolicyPrediction:
         """Returns a PolicyPrediction for the action_noop (name configurable in Policy)
 
         Args:
@@ -167,7 +180,9 @@ class ButtonPolicy(Policy):
             optional_events=[],
         )
 
-    def _check_condition_for_button(self, tracker, domain) -> Tuple[bool, Union[UserUttered,None], Union[BotUttered, None], int]:
+    def _check_condition_for_button(
+        self, tracker, domain
+    ) -> Tuple[bool, Union[UserUttered, None], Union[BotUttered, None], int]:
         """Check the condition if the uttonPolicy applies here
 
 
@@ -196,7 +211,7 @@ class ButtonPolicy(Policy):
                     return (False, None, None, 0)
             if (
                 isinstance(tracker.events[-2 - skip], ActionExecuted)
-                and tracker.events[-2 - skip].as_dict()['name'] == ACTION_LISTEN_NAME
+                and tracker.events[-2 - skip].as_dict()["name"] == ACTION_LISTEN_NAME
             ):
                 logger.debug(" action ok - last action was action_listen")
 
@@ -238,7 +253,6 @@ class ButtonPolicy(Policy):
         logger.debug("exit _check_condition_for_button == False, Not a button condition!")
         return (False, None, None, 0)
 
-
     def predict_action_probabilities(
         self,
         tracker: DialogueStateTracker,
@@ -265,10 +279,14 @@ class ButtonPolicy(Policy):
         logger.debug(f"Tracker check")
         for i, ev in enumerate(tracker.events):
             logger.debug(f"event #{i}")
-            logger.debug(ev.as_dict())
+            logger.debug(pprint.pformat(ev.as_dict(), sort_dicts=False))
         logger.debug(tracker.latest_message)
-        logger.debug(tracker._latest_message_data())
-        logger.debug("-------")
+        logger.debug(pprint.pformat(tracker._latest_message_data(), sort_dicts=False))
+        logger.debug("------- APPLIED EVENTS ------")
+        for i, ev in enumerate(tracker.applied_events()):
+            logger.debug(f"event #{i}")
+            logger.debug(pprint.pformat(ev.as_dict(), sort_dicts=False))
+        logger.debug("------- ------------- ------")
         done = False
 
         # check, skip = self._check_condition_for_button(tracker, domain)
@@ -286,23 +304,15 @@ class ButtonPolicy(Policy):
         if disabled:
             return self._predict_nothing(tracker, domain)
 
-        logger.debug("entities:")
-        logger.debug(entities)
-        # check for extended meta data "button_intents"
-        for n, b in enumerate(buttons):
-            logger.debug(f"{n} Button {b}")
-            button_intents = b.get("button_intents")
+        # logger.debug("entities:")
+        # logger.debug(entities)
 
-            if not button_intents is None:
-                return self._predict_button_action(tracker, domain)
-        # no prediction
-        return self._predict_nothing(tracker, domain)
+        return self._predict_button_action(tracker, domain)
 
     def _metadata(self) -> Dict[Text, Any]:
         return {
             "priority": self.priority,
             "button_action_name": self.button_action_name,
-
         }
 
     @classmethod
