@@ -73,20 +73,20 @@ def parse_community_date(date_string: Text) -> datetime.datetime:
 def get_community_events() -> List["CommunityEvent"]:
     """Return list of community events sorted ascending by their date."""
     response = get_community_page()
+    try:
+        if response.status_code == 200:
+            community_page = response.content
 
-    if response.status_code == 200:
-        community_page = response.content
+            soup = BeautifulSoup(community_page, "html.parser")
 
-        soup = BeautifulSoup(community_page, "html.parser")
+            events = soup.find("ul", attrs={"id": "events-list"}).find_all("li")
+            parsed_events = [CommunityEvent.from_html(e) for e in events]
 
-        events = soup.find("ul", attrs={"id": "events-list"}).find_all("li")
-        parsed_events = [CommunityEvent.from_html(e) for e in events]
-
-        now = datetime.date.today()
-        upcoming_events = [e for e in parsed_events if e is not None and e.date >= now]
-        return sorted(upcoming_events, key=lambda e: e.date)
-
-    return []
+            now = datetime.date.today()
+            upcoming_events = [e for e in parsed_events if e is not None and e.date >= now]
+            return sorted(upcoming_events, key=lambda e: e.date)
+    finally:
+        return []
 
 
 def get_country_for(city: Text) -> Optional[Text]:
