@@ -3,7 +3,7 @@ import logging
 from typing import Any, List, Dict, Text, Optional, Set, Tuple, TYPE_CHECKING
 
 
-import ast, re
+import ast, re, time
 
 from rasa.shared.constants import DOCS_URL_RULES, INTENT_MESSAGE_PREFIX
 from rasa.shared.exceptions import RasaException
@@ -56,9 +56,11 @@ logger = logging.getLogger(__name__)
 def extract_b_i_e_t(
     bot_utterance: BotUttered, user_utterance: UserUttered
 ) -> Tuple[list, object, list, str, bool]:
-    t_3 = bot_utterance.as_dict()
-    buttons = t_3["data"].get("buttons")
-    disabled = not (not t_3["data"].get("button_intents_disabled", False))  # True'ish
+    bot_uttererance_dict = bot_utterance.as_dict()
+    buttons = bot_uttererance_dict["data"].get("buttons")
+    disabled = not (
+        not bot_uttererance_dict["data"].get("button_intents_disabled", False)
+    )  # True'ish
     if not disabled:
         user = user_utterance.as_dict()
 
@@ -124,8 +126,7 @@ class ButtonPolicy(Policy):
     ) -> None:
 
         # TODO check intents against domain! - raise exception if wrong
-
-        # TODO check actions against domain! - raise exception if wrong
+        # how to get the self parameters if that is a CLASSMETHOD ??? NoGo here.
 
         logger.debug(f"executed validate_against_domain")
         return None
@@ -205,8 +206,8 @@ class ButtonPolicy(Policy):
             optional_events=[],
         )
 
-    def _check_condition_for_button2(
-        self, tracker, domain
+    def _check_condition_for_button(
+        self, tracker: DialogueStateTracker, domain
     ) -> Tuple[bool, UserUttered, BotUttered, int]:
         """Check the condition if the uttonPolicy applies here
 
@@ -220,61 +221,72 @@ class ButtonPolicy(Policy):
         """
         logger.debug(f"enter _check_condition_for_button")
         # TODO replace hard coded event numbers by filtered events (no $ intents etc)
+        # what do we need to check?
+        # - the last utterance is a user utterance which does not have the 'ButtonPolicy' in its meta data 'processors' -
+        #   otherwise the message came from the button policy
+        #
+
+        visible_events = tracker.applied_events()
 
         skip = 0
         while isinstance(tracker.events[-1 - skip], SlotSet):
             # jump over the slot set (autofill) actions after the NLU
             skip += 1
         logger.debug(f" _check_condition_for_button skip == {skip}")
-        if isinstance(tracker.events[-1 - skip], UserUttered) and len(tracker.events) >= 3:
-            logger.debug(" user ok")
-            # if user uttered is a literal intent (button click) abort here
-            pdata: dict = tracker.events[-1 - skip].as_dict().get("parse_data")
-            if pdata:
-                if pdata.get(TEXT, "").startswith(INTENT_MESSAGE_PREFIX):
-                    logger.debug("exit _check_condition_for_button == False, Button is clicked!")
-                    return (False, None, None, 0)
-            if (
-                isinstance(tracker.events[-2 - skip], ActionExecuted)
-                and tracker.events[-2 - skip].as_dict()["name"] == ACTION_LISTEN_NAME
-            ):
-                logger.debug(" action ok - last action was action_listen")
+        if not (
+            isinstance(tracker.events[-1 - skip], UserUttered)
+            and len(tracker.applied_events()) >= 3
+        ):
+            return (False, None, None, 0)
 
-                skip2 = 0
-                if isinstance(tracker.events[-3 - skip], UserUtteranceReverted):
-                    # check for rewind events and skip them!!
+        logger.debug(" user ok")
+        # if user uttered is a literal intent (button click) abort here
+        pdata: dict = tracker.events[-1 - skip].as_dict().get("parse_data")
+        if pdata:
+            if pdata.get(TEXT, "").startswith(INTENT_MESSAGE_PREFIX):
+                logger.debug("exit _check_condition_for_button == False, Button is clicked!")
+                return (False, None, None, 0)
+        if (
+            isinstance(tracker.events[-2 - skip], ActionExecuted)
+            and tracker.events[-2 - skip].as_dict()["name"] == ACTION_LISTEN_NAME
+        ):
+            logger.debug(" action ok - last action was action_listen")
 
-                    # Events für NLU fallback (rückwärts)
-                    # event: rewind;
-                    # event: bot utter_action:utter_ask_rephrase
-                    # event: action name: action_default_fallback
-                    # event: user_featurization
-                    # event: user (unverständliche eingabe) UserUttered
-                    while not isinstance(tracker.events[-3 - skip - skip2], UserUttered):
-                        skip2 += 1
-                    # also skip the user utterance + UserUtteranceReverted
-                    skip2 += 2
+            skip2 = 0
+            if isinstance(tracker.events[-3 - skip], UserUtteranceReverted):
+                # check for rewind events and skip them!!
 
-                if isinstance(tracker.events[-3 - skip - skip2], BotUttered):
-                    logger.debug(" bot ")
-                    # check if the last bot utterance before was a button option
-                    button_utterance_event = tracker.events[-3 - skip - skip2]
-                    button_utterance = button_utterance_event.as_dict()
-                    if not button_utterance.get("data") is None:
-                        logger.debug(" data ")
-                        if not button_utterance["data"].get("buttons") is None:
-                            logger.debug(" buttons! ")
-                            # we know it was a button question!
-                            user = tracker.events[-1 - skip].as_dict()
-                            pdata = user.get("parse_data")
-                            if pdata is not None:
-                                logger.debug(f"exit _check_condition_for_button == (True,...)")
-                                return (
-                                    True,
-                                    tracker.events[-1 - skip],
-                                    button_utterance_event,
-                                    skip + skip2,
-                                )
+                # Events für NLU fallback (rückwärts)
+                # event: rewind;
+                # event: bot utter_action:utter_ask_rephrase
+                # event: action name: action_default_fallback
+                # event: user_featurization
+                # event: user (unverständliche eingabe) UserUttered
+                while not isinstance(tracker.events[-3 - skip - skip2], UserUttered):
+                    skip2 += 1
+                # also skip the user utterance + UserUtteranceReverted
+                skip2 += 2
+
+            if isinstance(tracker.events[-3 - skip - skip2], BotUttered):
+                logger.debug(" bot ")
+                # check if the last bot utterance before was a button option
+                button_utterance_event = tracker.events[-3 - skip - skip2]
+                button_utterance = button_utterance_event.as_dict()
+                if not button_utterance.get("data") is None:
+                    logger.debug(" data ")
+                    if not button_utterance["data"].get("buttons") is None:
+                        logger.debug(" buttons! ")
+                        # we know it was a button question!
+                        user = tracker.events[-1 - skip].as_dict()
+                        pdata = user.get("parse_data")
+                        if pdata is not None:
+                            logger.debug(f"exit _check_condition_for_button == (True,...)")
+                            return (
+                                True,
+                                tracker.events[-1 - skip],
+                                button_utterance_event,
+                                skip + skip2,
+                            )
         logger.debug("exit _check_condition_for_button == False, Not a button condition!")
         return (False, None, None, 0)
 
@@ -421,6 +433,9 @@ class ButtonPolicy(Policy):
         logger.debug(f"exit _process_button == False (end of loop)")
         return False
 
+    def _modify_tracker(self):
+        pass
+
     def predict_action_probabilities(
         self,
         tracker: DialogueStateTracker,
@@ -454,7 +469,7 @@ class ButtonPolicy(Policy):
         done = False
 
         # check, skip = self._check_condition_for_button(tracker, domain)
-        check, user_utterance_event, button_utterance, skips = self._check_condition_for_button2(
+        check, user_utterance_event, button_utterance, skips = self._check_condition_for_button(
             tracker, domain
         )
         if not check:
@@ -524,6 +539,7 @@ class ButtonPolicy(Policy):
                             PREDICTED_CONFIDENCE_KEY: intent[PREDICTED_CONFIDENCE_KEY],
                             ENTITIES: entitylist,  # replace entities
                         },
+                        metadata={"processors": ["ButtonPolicy"]},
                     )
                     tracker.events.append(utterance)
                     tracker.latest_message = (
