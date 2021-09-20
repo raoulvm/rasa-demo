@@ -79,7 +79,7 @@ def get_community_events() -> List["CommunityEvent"]:
 
         soup = BeautifulSoup(community_page, "html.parser")
 
-        events = soup.find("ul", attrs={"id": "events-list"}).find_all("li")
+        events = []  # soup.find("ul", attrs={"id": "events-list"}).find_all("li")
         parsed_events = [CommunityEvent.from_html(e) for e in events]
 
         now = datetime.date.today()
