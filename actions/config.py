@@ -3,11 +3,11 @@
 You can create a file called `.env` in the root of the repo, containing your local env vars.
 It will be automatically loaded when starting the action server.
 """
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 
 # Load environment variables
 # needs to happen before anything else (to properly instantiate constants)
-load_dotenv(verbose=True, override=True)
+#load_dotenv(verbose=True, override=True)
 
 import os
 
