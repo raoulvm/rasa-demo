@@ -316,6 +316,7 @@ class ActionButtonAnswer(Action):
         # tracker.latest_message = (
         #     utterance  #  change also last message data at `tracker.latest_message`
         # )
+        result.append(ActionReverted(timestamp=time.time()))
         return result
 
     def run(
