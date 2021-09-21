@@ -56,9 +56,9 @@ logger = logging.getLogger(__name__)
 def extract_b_i_e_t(
     bot_utterance: BotUttered, user_utterance: UserUttered
 ) -> Tuple[list, dict, dict, str, bool]:
-    t_3 = bot_utterance.as_dict()
-    buttons = t_3["data"].get("buttons")
-    disabled = not (not t_3["data"].get("button_intents_disabled", False))  # True'ish
+    bot_utterance_dict = bot_utterance.as_dict()
+    buttons = bot_utterance_dict["data"].get("buttons")
+    disabled = not (not bot_utterance_dict["data"].get("button_intents_disabled", False))  # True'ish
     if not disabled:
         user = user_utterance.as_dict()
 
@@ -279,13 +279,13 @@ class ButtonPolicy(Policy):
         logger.debug(f"Tracker check")
         for i, ev in enumerate(tracker.events):
             logger.debug(f"event #{i}")
-            logger.debug(pprint.pformat(ev.as_dict(), sort_dicts=False))
-        logger.debug(tracker.latest_message)
-        logger.debug(pprint.pformat(tracker._latest_message_data(), sort_dicts=False))
+            logger.debug(pprint.pformat(ev.as_dict(), sort_dicts=False)[:200])
+        #logger.debug(tracker.latest_message)
+        #logger.debug(pprint.pformat(tracker._latest_message_data(), sort_dicts=False))
         logger.debug("------- APPLIED EVENTS ------")
         for i, ev in enumerate(tracker.applied_events()):
             logger.debug(f"event #{i}")
-            logger.debug(pprint.pformat(ev.as_dict(), sort_dicts=False))
+            logger.debug(pprint.pformat(ev.as_dict(), sort_dicts=False)[:200])
         logger.debug("------- ------------- ------")
         done = False
 
