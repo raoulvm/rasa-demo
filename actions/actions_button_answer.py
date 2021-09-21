@@ -215,24 +215,22 @@ class ActionButtonAnswer(Action):
                         logger.debug("Value required!")
                         req_ent_key: str = list(req_entity.keys())[0]
 
-                        if isinstance(list(req_entity.values())[0], str):
+                        if isinstance(req_entity[req_ent_key], str):
                             logger.debug("single value")
                             # one string as value
                             # format the same as in rasa entity list?!
                             if (
-                                req_entity[ENTITY_ATTRIBUTE_TYPE],
-                                req_entity[ENTITY_ATTRIBUTE_VALUE],
+                                req_ent_key,
+                                req_entity[req_ent_key],
                             ) in entities.items():
                                 # fit, remove requirement
                                 req_list_of_entities.remove(req_entity)
                                 logger.debug("FIT SINGLE VALUE")
                                 logger.debug(req_list_of_entities)
-                        elif isinstance(list(req_entity.values())[0], list):
+                        elif isinstance(req_entity[req_ent_key], list):
                             # multiple possible values, iterate
                             logger.debug("iterate multiple values:")
-                            for val in list(req_entity.values())[
-                                0
-                            ]:  # Value of the first (and only) key
+                            for val in req_entity[req_ent_key]:  # Value of the first (and only) key
                                 logger.debug(f"{req_ent_key}:{val}")
                                 if (req_ent_key, val) in entities.items():
                                     # fit, remove requirement
