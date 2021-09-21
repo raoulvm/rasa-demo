@@ -181,74 +181,62 @@ class ButtonPolicy(Policy):
         )
 
     def _check_condition_for_button(
-        self, tracker, domain
+        self, tracker: DialogueStateTracker, domain: Domain
     ) -> Tuple[bool, Union[UserUttered, None], Union[BotUttered, None], int]:
         """Check the condition if the uttonPolicy applies here
 
 
         Args:
-            tracker ([type]): [description]
-            domain ([type]): [description]
+            tracker (DialogueStateTracker)
+            domain (Domain)
 
         Returns:
-            Tuple[bool, UserUttered, BotUttered]: True, if the condition applies + Last User Utterance and the BotUtterance conaing the buttons
+            Tuple[bool, UserUttered, BotUttered, int]: True, if the condition applies + Last User Utterance and the BotUtterance conaing the buttons
         """
         logger.debug(f"enter _check_condition_for_button")
         # TODO replace hard coded event numbers by filtered events (no $ intents etc)
 
+        applied_events = tracker.applied_events()
+
         skip = 0
-        while isinstance(tracker.events[-1 - skip], SlotSet):
+        while isinstance(applied_events[-1 - skip], SlotSet):
             # jump over the slot set (autofill) actions after the NLU
             skip += 1
         logger.debug(f" _check_condition_for_button skip == {skip}")
-        if isinstance(tracker.events[-1 - skip], UserUttered) and len(tracker.events) >= 3:
+        if isinstance(applied_events[-1 - skip], UserUttered) and len(applied_events) >= 3:
             logger.debug(" user ok")
             # if user uttered is a literal intent (button click) abort here
-            pdata: dict = tracker.events[-1 - skip].as_dict().get("parse_data")
+            pdata: dict = applied_events[-1 - skip].as_dict().get("parse_data")
             if pdata:
                 if pdata.get(TEXT, "").startswith(INTENT_MESSAGE_PREFIX):
                     logger.debug("exit _check_condition_for_button == False, Button is clicked!")
                     return (False, None, None, 0)
             if (
-                isinstance(tracker.events[-2 - skip], ActionExecuted)
-                and tracker.events[-2 - skip].as_dict()["name"] == ACTION_LISTEN_NAME
+                isinstance(applied_events[-2 - skip], ActionExecuted)
+                and applied_events[-2 - skip].as_dict()["name"] == ACTION_LISTEN_NAME
             ):
                 logger.debug(" action ok - last action was action_listen")
 
-                skip2 = 0
-                if isinstance(tracker.events[-3 - skip], UserUtteranceReverted):
-                    # check for rewind events and skip them!!
-
-                    # Events für NLU fallback (rückwärts)
-                    # event: rewind;
-                    # event: bot utter_action:utter_ask_rephrase
-                    # event: action name: action_default_fallback
-                    # event: user_featurization
-                    # event: user (unverständliche eingabe) UserUttered
-                    while not isinstance(tracker.events[-3 - skip - skip2], UserUttered):
-                        skip2 += 1
-                    # also skip the user utterance + UserUtteranceReverted
-                    skip2 += 2
-
-                if isinstance(tracker.events[-3 - skip - skip2], BotUttered):
+                if isinstance(applied_events[-3 - skip], BotUttered):
                     logger.debug(" bot ")
                     # check if the last bot utterance before was a button option
-                    button_utterance_event = tracker.events[-3 - skip - skip2]
+                    button_utterance_event = tracker.events[-3 - skip ]
                     button_utterance = button_utterance_event.as_dict()
                     if not button_utterance.get("data") is None:
                         logger.debug(" data ")
                         if not button_utterance["data"].get("buttons") is None:
                             logger.debug(" buttons! ")
                             # we know it was a button question!
-                            user = tracker.events[-1 - skip].as_dict()
+                            user_event = applied_events[-1 - skip]
+                            user = user_event.as_dict()
                             pdata = user.get("parse_data")
                             if pdata is not None:
                                 logger.debug(f"exit _check_condition_for_button == (True,...)")
                                 return (
                                     True,
-                                    tracker.events[-1 - skip],
+                                    user_event,
                                     button_utterance_event,
-                                    skip + skip2,
+                                    skip ,
                                 )
         logger.debug("exit _check_condition_for_button == False, Not a button condition!")
         return (False, None, None, 0)
@@ -317,4 +305,4 @@ class ButtonPolicy(Policy):
 
     @classmethod
     def _metadata_filename(cls) -> Text:
-        return "test_policy.json"
+        return "button_policy.json"
