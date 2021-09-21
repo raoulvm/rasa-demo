@@ -16,12 +16,12 @@ from rasa_sdk.events import (
 )
 
 from actions import config
-from actions.api import community_events
-from actions.api.algolia import AlgoliaAPI
-from actions.api.discourse import DiscourseAPI
-from actions.api.gdrive_service import GDriveService
-from actions.api.mailchimp import MailChimpAPI
-from actions.api.rasaxapi import RasaXAPI
+# from actions.api import community_events
+# from actions.api.algolia import AlgoliaAPI
+# from actions.api.discourse import DiscourseAPI
+# from actions.api.gdrive_service import GDriveService
+# from actions.api.mailchimp import MailChimpAPI
+# from actions.api.rasaxapi import RasaXAPI
 
 USER_INTENT_OUT_OF_SCOPE = "out_of_scope"
 
@@ -42,16 +42,16 @@ class ActionSubmitSubscribeNewsletterForm(Action):
     ) -> List[EventType]:
         """Once we have an email, attempt to add it to the database"""
 
-        email = tracker.get_slot("email")
-        client = MailChimpAPI(config.mailchimp_api_key)
-        subscription_status = client.subscribe_user(config.mailchimp_list, email)
+        # email = tracker.get_slot("email")
+        # client = MailChimpAPI(config.mailchimp_api_key)
+        # subscription_status = client.subscribe_user(config.mailchimp_list, email)
 
-        if subscription_status == "newly_subscribed":
-            dispatcher.utter_message(template="utter_confirmationemail")
-        elif subscription_status == "already_subscribed":
-            dispatcher.utter_message(template="utter_already_subscribed")
-        elif subscription_status == "error":
-            dispatcher.utter_message(template="utter_could_not_subscribe")
+        # if subscription_status == "newly_subscribed":
+        #     dispatcher.utter_message(template="utter_confirmationemail")
+        # elif subscription_status == "already_subscribed":
+        #     dispatcher.utter_message(template="utter_already_subscribed")
+        # elif subscription_status == "error":
+        #     dispatcher.utter_message(template="utter_could_not_subscribe")
         return []
 
 
@@ -67,7 +67,7 @@ class ValidateSubscribeNewsletterForm(FormValidationAction):
         domain: DomainDict,
     ) -> Dict[Text, Any]:
 
-        if MailChimpAPI.is_valid_email(value):
+        if False: # and MailChimpAPI.is_valid_email(value):
             return {"email": value}
         else:
             dispatcher.utter_message(template="utter_no_email")
@@ -100,11 +100,11 @@ class ActionSubmitSalesForm(Action):
         sales_info = [company, use_case, budget, date, person_name, job_function, email]
 
         try:
-            gdrive = GDriveService()
-            gdrive.append_row(
-                gdrive.SALES_SPREADSHEET_NAME, gdrive.SALES_WORKSHEET_NAME, sales_info
-            )
-            dispatcher.utter_message(template="utter_confirm_salesrequest")
+            # gdrive = GDriveService()
+            # gdrive.append_row(
+            #     gdrive.SALES_SPREADSHEET_NAME, gdrive.SALES_WORKSHEET_NAME, sales_info
+            # )
+            # dispatcher.utter_message(template="utter_confirm_salesrequest")
             return []
         except Exception as e:
             logger.error(
@@ -127,7 +127,7 @@ class ValidateSalesForm(FormValidationAction):
         domain: DomainDict,
     ) -> Dict[Text, Any]:
 
-        if MailChimpAPI.is_valid_email(value):
+        if False: #MailChimpAPI.is_valid_email(value):
             return {"business_email": value}
         else:
             dispatcher.utter_message(template="utter_no_email")
@@ -387,10 +387,10 @@ class ActionStoreProblemDescription(Action):
         message_link = f"{config.rasa_x_host_schema}://{config.rasa_x_host}/conversations/{tracker.sender_id}/{timestamp}"
         row_values = [date, problem, message_link]
 
-        gdrive = GDriveService()
-        gdrive.append_row(
-            gdrive.ISSUES_SPREADSHEET_NAME, gdrive.PLAYGROUND_WORKSHEET_NAME, row_values
-        )
+        # gdrive = GDriveService()
+        # gdrive.append_row(
+        #     gdrive.ISSUES_SPREADSHEET_NAME, gdrive.PLAYGROUND_WORKSHEET_NAME, row_values
+        # )
 
         return [SlotSet("problem_description", None)]
 
@@ -575,11 +575,11 @@ class ActionCommunityEvent(Action):
     def name(self) -> Text:
         return "action_get_community_events"
 
-    def _get_events(self) -> List[community_events.CommunityEvent]:
+    def _get_events(self) -> list: #List[community_events.CommunityEvent]:
         if self.events is None or self._are_events_expired():
             logger.debug("Getting events from website.")
             self.last_event_update = datetime.now()
-            self.events = community_events.get_community_events()
+            self.events = [] #community_events.get_community_events()
 
         return self.events
 
@@ -680,6 +680,7 @@ class ActionDocsSearch(Action):
         return "action_docs_search"
 
     def run(self, dispatcher, tracker, domain):
+        return []
         docs_found = False
         search_text = tracker.latest_message.get("text")
 
@@ -741,6 +742,7 @@ class ActionForumSearch(Action):
         return "action_forum_search"
 
     def run(self, dispatcher, tracker, domain):
+        return []
         search_text = tracker.latest_message.get("text")
         # If we're in a TwoStageFallback we need to look back two more user utterance to get the actual text
         if search_text == "/technical_question{}" or search_text == "/deny":
