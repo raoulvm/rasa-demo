@@ -23,12 +23,9 @@ from rasa_sdk.types import DomainDict
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import (
     ActionExecuted,
-    SlotSet,
+    ActionExecutionRejected,
     UserUtteranceReverted,
-    ActionReverted,
-    ConversationPaused,
     EventType,
-    BotUttered,
     UserUttered,
 )
 
@@ -316,7 +313,20 @@ class ActionButtonAnswer(Action):
         # tracker.latest_message = (
         #     utterance  #  change also last message data at `tracker.latest_message`
         # )
-        result.append(ActionReverted(timestamp=time.time()))
+
+        # problem here is that the custom action event is added AFTER the custom actions ends
+        # rasa.core.agent.Agent.execute_action()
+        # rasa.core.processor.MessageProcessor._logaction_on_tracker()
+        # rasa.core.action.Action.event_for_successful_execution()
+        #
+        # result.append(ActionReverted(timestamp=time.time()))
+        result.append(
+            ActionExecutionRejected(
+                action_name="action_process_button_answer", timestamp=time.time()
+            )
+        )
+        logger.debug("Result returned:")
+        logger.debug(pprint.pformat(result))
         return result
 
     def run(
