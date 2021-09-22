@@ -37,7 +37,7 @@ from actions import config
 logger = logging.getLogger(__name__)
 
 
-# defaults ==> make that read a file
+# defaults ==> #TODO make that read a file
 use_default_intents: bool = True
 delete_entities: bool = True  # delete entities from "inform" or other alternate intents
 
@@ -365,7 +365,6 @@ class ActionButtonAnswer(Action):
                 entities=entities,
             ):
                 # we got a match
-                # TODO create events and return them
                 return self._create_events(
                     tracker,
                     dispatcher,
