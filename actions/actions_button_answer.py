@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
-import logging, re, ast, pprint
+import logging
+import re
+import ast
+import pprint
 import json
 import time
-from typing import Any, Dict, List, Text, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Text, Tuple
 
-from rasa.shared.constants import DOCS_URL_RULES, INTENT_MESSAGE_PREFIX
+""" rasa oss is not installed in OpenShift !
+############################################
+from rasa.shared.constants import INTENT_MESSAGE_PREFIX
 from rasa.shared.nlu.constants import (
     INTENT_NAME_KEY,
     PREDICTED_CONFIDENCE_KEY,
@@ -14,39 +19,57 @@ from rasa.shared.nlu.constants import (
     INTENT,
     TEXT,
 )
+"""
+
+INTENT_MESSAGE_PREFIX = "/"
+INTENT_NAME_KEY = "name"
+PREDICTED_CONFIDENCE_KEY = "confidence"
+ENTITIES = "entities"
+ENTITY_ATTRIBUTE_TYPE = "entity"
+ENTITY_ATTRIBUTE_VALUE = "value"
+INTENT = "intent"
+TEXT = "text"
 
 from rasa_sdk import Action, Tracker
 from rasa_sdk.interfaces import ACTION_LISTEN_NAME
 from rasa_sdk.types import DomainDict
-
-# from rasa_sdk.forms import FormValidationAction
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import (
     ActionExecuted,
     ActionExecutionRejected,
+    SlotSet,
     UserUtteranceReverted,
     EventType,
     UserUttered,
 )
 
-from actions import config
-
-
-# USER_INTENT_OUT_OF_SCOPE = "out_of_scope"
 
 logger = logging.getLogger(__name__)
 
+INTENTFILENAME = r"./config/button_intents.json"
 
-# defaults ==> #TODO make that read a file
-use_default_intents: bool = True
-delete_entities: bool = True  # delete entities from "inform" or other alternate intents
 
-intent_inform_ordinal_name: str = "inform_#_ordinal"
-max_numerical_intents: int = 6
-intent_inform_left_name: str = "inform_links"
-intent_inform_right_name: str = "inform_rechts"
-intent_inform_last_name: str = "inform_letzte"
-intent_inform_middle_name: str = "inform_mitte"
+def read_button_intents_defaults(filename: str = INTENTFILENAME) -> dict:
+    result = {
+        "use_default_intents": False,
+        "delete_entities": True,  # delete entities from "inform" or other alternate intents
+        "keep_non_influencing_slots": True,
+        "intent_inform_ordinal_name": "",
+        "max_numerical_intents": 0,
+        "intent_inform_left_name": "",
+        "intent_inform_right_name": "",
+        "intent_inform_last_name": "",
+        "intent_inform_middle_name": "",
+    }
+    try:
+        logger.debug(f"Try opening file {filename}")
+        with open(file=filename, mode="rt") as f:
+            result = json.load(f)
+            logger.debug(f"Parsed file {filename} to {result}")
+    except Exception as e:
+        logger.debug(f"FAILED opening file {filename} with {e}")
+
+    return result
 
 
 def extract_b_i_e_t(
@@ -63,39 +86,41 @@ def extract_b_i_e_t(
     """
     data: dict = bot_utterance.get("data", {})
     buttons = data.get("buttons", [])
-    disabled = not (not data.get("button_intents_disabled", False))  # True'ish
-    if not disabled:
 
-        pdata = user_utterance.get("parse_data", {})  # parse data has been checked upfront!
+    for b in buttons:
+        if b.get("button_intents_disabled", False):
+            logger.debug("buttons policy disabled for this utterance.")
+            return [], {}, {}, "", True
 
-        intent = pdata.get(INTENT, {})
-        text = pdata.get(TEXT, "")
-        entities = {
-            e[ENTITY_ATTRIBUTE_TYPE].lower(): (
-                e[ENTITY_ATTRIBUTE_VALUE].lower()
-                if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str)
-                else e[ENTITY_ATTRIBUTE_VALUE]
-            )
-            for e in pdata.get(ENTITIES, [])
-        }
+    pdata = user_utterance.get("parse_data", {})
 
-        return buttons, intent, entities, text, disabled
-    else:
-        logger.debug("Button Intents are disabled")
-        return [], {}, {}, "", True
+    intent = pdata.get(INTENT, {})
+    text = pdata.get(TEXT, "")
+    entities = {
+        e[ENTITY_ATTRIBUTE_TYPE].lower(): (
+            e[ENTITY_ATTRIBUTE_VALUE].lower()
+            if isinstance(e[ENTITY_ATTRIBUTE_VALUE], str)
+            else e[ENTITY_ATTRIBUTE_VALUE]
+        )
+        for e in pdata.get(ENTITIES, [])
+    }
+
+    return buttons, intent, entities, text, False
 
 
 class ActionButtonAnswer(Action):
-    def __init__(self) -> None:
+    def __init__(self, settingsfilename: str = INTENTFILENAME) -> None:
         super().__init__()
-        self.use_default_intents: bool = use_default_intents
-        self.delete_entities: bool = delete_entities
-        self.intent_inform_ordinal_name: str = intent_inform_ordinal_name
-        self.max_numerical_intents: int = max_numerical_intents
-        self.intent_inform_left_name: str = intent_inform_left_name
-        self.intent_inform_right_name: str = intent_inform_right_name
-        self.intent_inform_last_name: str = intent_inform_last_name
-        self.intent_inform_middle_name: str = intent_inform_middle_name
+        defaults = read_button_intents_defaults(filename=settingsfilename)
+        self.use_default_intents: bool = defaults.get("use_default_intents", True)
+        self.delete_entities: bool = defaults.get("delete_entities", True)
+        self.keep_non_influencing_slots = defaults.get("keep_non_influencing_slots", True)
+        self.intent_inform_ordinal_name: str = defaults.get("intent_inform_ordinal_name", "")
+        self.max_numerical_intents: int = defaults.get("max_numerical_intents", 0)
+        self.intent_inform_left_name: str = defaults.get("intent_inform_left_name", "")
+        self.intent_inform_right_name: str = defaults.get("intent_inform_right_name", "")
+        self.intent_inform_last_name: str = defaults.get("intent_inform_last_name", "")
+        self.intent_inform_middle_name: str = defaults.get("intent_inform_middle_name", "")
 
     def name(self) -> Text:
         return "action_process_button_answer"
@@ -112,19 +137,19 @@ class ActionButtonAnswer(Action):
         """
         intents = []
         if self.use_default_intents:
-            if buttonnumber == 0 and len(self.intent_inform_left_name) > 0:
+            if buttonnumber == 0 and self.intent_inform_left_name:
                 intents.append(self.intent_inform_left_name)
-            if len(self.intent_inform_ordinal_name) > 0:
+            if self.intent_inform_ordinal_name and buttonnumber < self.max_numerical_intents:
                 intents.append(self.intent_inform_ordinal_name.replace("#", str(buttonnumber + 1)))
             if (
                 (buttoncount) % 2 == 1
                 and int(buttoncount - 1) / 2 == buttonnumber
-                and len(self.intent_inform_middle_name) > 0
+                and self.intent_inform_middle_name
             ):  # odd number of buttons and n is the middle
                 intents.append(self.intent_inform_middle_name)
-            if buttonnumber == buttoncount - 1 and len(self.intent_inform_last_name) > 0:
+            if buttonnumber == buttoncount - 1 and self.intent_inform_last_name:
                 intents.append(self.intent_inform_last_name)
-            if buttonnumber == buttoncount - 1 and len(self.intent_inform_right_name) > 0:
+            if buttonnumber == buttoncount - 1 and self.intent_inform_right_name:
                 intents.append(self.intent_inform_right_name)
         logger.debug(f"_get_default_intents == {intents})")
         return intents
@@ -141,14 +166,19 @@ class ActionButtonAnswer(Action):
         """
         # intents with no entity requirements
         logger.debug(f"enter _is_name_in_intentlist_no_ent({intents}, {intentname})")
-        logger.debug(f"_is_name_in_intentlist_no_ent ")
+        logger.debug("_is_name_in_intentlist_no_ent ")
         logger.debug(
             f"exit is_name_in_intentlist_no_ent == {intentname in [i for i in intents if isinstance(i, str)]}"
         )
         return intentname in [i for i in intents if isinstance(i, str)]
 
     def _process_button(
-        self, buttonnumber: int, buttoncount: int, intents: list, intentname: str, entities: dict
+        self,
+        buttonnumber: int,
+        buttoncount: int,
+        intents: list,
+        intentname: str,
+        entities: dict,
     ) -> bool:
         """Check a button against the current classified intent (and it's entties, if required)
 
@@ -163,7 +193,7 @@ class ActionButtonAnswer(Action):
         Returns:
             bool: True if the button is detected using the alternate intents
         """
-        logger.debug(f"enter _process_button")
+        logger.debug("enter _process_button")
 
         # amend with default button_intents
         intents.extend(self._get_default_intents(buttonnumber, buttoncount))
@@ -173,14 +203,15 @@ class ActionButtonAnswer(Action):
         ]  # all intents to search for (regardless of entities)
 
         if self._is_name_in_intentlist_no_ent(intents, intentname):
-            logger.debug(f"exit _process_button == True")
+            logger.debug("exit _process_button == True")
             return True
-        if not intentname in req_intent_checklist:
+        if intentname not in req_intent_checklist:
             # intent is not there at all
-            logger.debug(f"exit _process_button == False")
+            logger.debug("exit _process_button == False")
             return False
 
         # extract entity requirements from button intents that have the same intent name as the intent from NLU
+        # TODO fix for strings in the dict, lists are working!!!
         req_intents_with_entities = [
             v
             for i in intents
@@ -190,60 +221,57 @@ class ActionButtonAnswer(Action):
         logger.debug("req_intents_with_entities")
         logger.debug(req_intents_with_entities)
 
-        if req_intents_with_entities:
+        if not req_intents_with_entities:
             # at least one intent with that name requires an entity
             # check all entity values for a match!
             # intents are OR conditions
             # entities are AND conditions
             # entity values are OR conditions
+            logger.debug("exit _process_button empty list of required intents")
+            return False
 
-            for req_list_of_entities in req_intents_with_entities:
-                for req_entity in req_list_of_entities:
-                    logger.debug(req_list_of_entities)
-                    logger.debug(req_entity)
-                    if isinstance(req_entity, str):
-                        # single entity without value requirement
-                        # just check if it there
-                        logger.debug("no value required")
-                        if req_entity in entities.keys():
-                            logger.debug("FIT NO VALUE")
-                            # fit, remove requirement
-                            req_list_of_entities.remove(req_entity)
-                            logger.debug(req_list_of_entities)
-                    elif isinstance(req_entity, Dict):
-                        # entity with one or more value requirements
-                        logger.debug("Value required!")
-                        req_ent_key: str = list(req_entity.keys())[0]
+        for req_list_of_entities in req_intents_with_entities:
+            for req_entity in req_list_of_entities:
 
-                        if isinstance(req_entity[req_ent_key], str):
-                            logger.debug("single value")
-                            # one string as value
-                            # format the same as in rasa entity list?!
-                            if (
-                                req_ent_key,
-                                req_entity[req_ent_key],
-                            ) in entities.items():
+                logger.debug(f"req_entity == {req_entity} in {entities} ?")
+
+                if isinstance(req_entity, str) and req_entity in entities:
+                    # single entity without value requirement
+                    # fit, remove requirement
+                    req_list_of_entities.remove(req_entity)
+                    logger.debug("FIT FOUND WITH NO VALUE")
+                elif isinstance(req_entity, Dict):
+                    # entity with one or more value requirements
+                    logger.debug("Value required")
+                    req_ent_key: str = list(req_entity.keys())[0]
+                    if (
+                        isinstance(req_entity[req_ent_key], str)
+                        and (req_ent_key, req_entity[req_ent_key]) in entities.items()
+                    ):
+                        # one string as value
+                        # format the same as in rasa entity list?! - no: key:value dict, not list of dicts as rasa uses
+                        # fit, remove requirement
+                        req_list_of_entities.remove(req_entity)
+                        logger.debug("FIT FOUND IN SINGLE VALUE")
+                        logger.debug(req_list_of_entities)
+                    elif isinstance(req_entity[req_ent_key], list):
+                        # multiple possible values, iterate
+                        logger.debug("iterate multiple values:")
+                        for val in req_entity[req_ent_key]:
+                            # Value of the first (and only) key
+                            logger.debug(f"{req_ent_key}:{val}")
+                            if (req_ent_key, val) in entities.items():
                                 # fit, remove requirement
                                 req_list_of_entities.remove(req_entity)
-                                logger.debug("FIT SINGLE VALUE")
+                                logger.debug("FIT FOUND FROM ITERATE")
                                 logger.debug(req_list_of_entities)
-                        elif isinstance(req_entity[req_ent_key], list):
-                            # multiple possible values, iterate
-                            logger.debug("iterate multiple values:")
-                            for val in req_entity[req_ent_key]:  # Value of the first (and only) key
-                                logger.debug(f"{req_ent_key}:{val}")
-                                if (req_ent_key, val) in entities.items():
-                                    # fit, remove requirement
-                                    req_list_of_entities.remove(req_entity)
-                                    logger.debug("FIT FROM ITERATE")
-                                    logger.debug(req_list_of_entities)
-                    logger.debug("-- end of check --")
-                if len(req_list_of_entities) == 0:
-                    # removed all requirements
-                    logger.debug("-- SUCCESS --")
-                    logger.debug(f"exit _process_button == True")
-                    return True
-        logger.debug(f"exit _process_button == False (end of loop)")
+                logger.debug("-- end of check --")
+            if len(req_list_of_entities) == 0:
+                # removed all requirements
+                logger.debug("-- SUCCESS --")
+                logger.debug("exit _process_button == True")
+                return True
+        logger.debug("exit _process_button == False (end of loop)")
         return False
 
     def _create_events(
@@ -254,9 +282,11 @@ class ActionButtonAnswer(Action):
         text: str,
         orig_intent: dict,
         user_utterance: EventType,
+        original_entities: List[dict] = [],
+        original_slots: List[dict] = [],
     ) -> List[EventType]:
         # store the skipped events
-        logger.debug(f"modify tracker")
+        logger.debug("modify tracker")
 
         # revert the user utterance
         result = [
@@ -270,54 +300,57 @@ class ActionButtonAnswer(Action):
         ]
 
         payload: str = button.get("payload", "")
-        if not payload.startswith(INTENT_MESSAGE_PREFIX):
-            raise ValueError("Button Payload is no literal intent")
-        # remove intent prefix (default "/")
-        payload = payload[len(INTENT_MESSAGE_PREFIX) :]
+        if payload.startswith(INTENT_MESSAGE_PREFIX):
+            # raise ValueError("Button Payload is no literal intent")
+            # remove intent prefix (default "/")
+            payload = payload[len(INTENT_MESSAGE_PREFIX) :]
 
-        #  fix intents with buttons as payloads!
-        payloadentities = {}
-        if "{" in payload:
-            # contains entities
-            payloadentities = re.findall(r"{.*?}", payload)
-            if payloadentities:
-                payloadentities = ast.literal_eval(payloadentities[0])
-            else:
-                raise ValueError(f"Failed to parse {button.get('payload')} ")
-            payload = payload[: payload.index("{")]  # remove entities from intent name
-        entitylist = []
-        for k, v in payloadentities.items():
-            entitylist.append(
+            #  fix intents with buttons as payloads!
+            payloadentities = {}
+            if "{" in payload:
+                # contains entities
+                payloadentities = re.findall(r"{.*?}", payload)
+                if payloadentities:
+                    payloadentities = ast.literal_eval(payloadentities[0])
+                else:
+                    raise ValueError(f"Failed to parse {button.get('payload')} ")
+                payload = payload[: payload.index("{")]  # remove entities from intent name
+            entitylist = [
                 {
                     ENTITY_ATTRIBUTE_TYPE: k,
                     ENTITY_ATTRIBUTE_VALUE: v,
                     "processors": ["button_policy"],
                 }
-            )
-        utterance = UserUttered(
-            text=text,
-            parse_data={
-                # **user_utterance.get("parse_data",{}),
-                INTENT: {
-                    INTENT_NAME_KEY: payload,
-                    PREDICTED_CONFIDENCE_KEY: orig_intent[PREDICTED_CONFIDENCE_KEY],
+                for k, v in payloadentities.items()
+            ]
+            entitylist.extend(original_entities)  # add the original entities if they are passed
+            utterance = UserUttered(
+                text=text,
+                parse_data={
+                    # **user_utterance.get("parse_data",{}),
+                    INTENT: {
+                        INTENT_NAME_KEY: payload,
+                        PREDICTED_CONFIDENCE_KEY: orig_intent[PREDICTED_CONFIDENCE_KEY],
+                    },
+                    ENTITIES: entitylist,  # replace entities
                 },
-                ENTITIES: entitylist,  # replace entities
-            },
-            input_channel=user_utterance.get("input_channel", ""),
-            timestamp=time.time(),
-        )
+                input_channel=user_utterance.get("input_channel", ""),
+                timestamp=time.time(),
+            )
+        else:
+            # it is a clear text utterance in the payload
+            logger.info(f'Clear text payload "{payload}"')
+            utterance = UserUttered(
+                text=payload,
+                input_channel=user_utterance.get("input_channel", ""),
+                timestamp=time.time(),
+            )
         result.append(utterance)
-        # tracker.latest_message = (
-        #     utterance  #  change also last message data at `tracker.latest_message`
-        # )
 
-        # problem here is that the custom action event is added AFTER the custom actions ends
-        # rasa.core.agent.Agent.execute_action()
-        # rasa.core.processor.MessageProcessor._logaction_on_tracker()
-        # rasa.core.action.Action.event_for_successful_execution()
-        #
-        # result.append(ActionReverted(timestamp=time.time()))
+        # re-create the original slot set events for non-influencing slots
+        for e in original_slots:
+            result.append(SlotSet(key=e.get("name"), value=e.get("value"), timestamp=time.time()))
+
         result.append(
             ActionExecutionRejected(
                 action_name="action_process_button_answer", timestamp=time.time()
@@ -326,6 +359,21 @@ class ActionButtonAnswer(Action):
         logger.debug("Result returned:")
         logger.debug(pprint.pformat(result))
         return result
+
+    def get_applied_events_for(
+        self, tracker: Tracker, event_type: Text, after_timestamp: float, skip: int = 0
+    ) -> Iterable:
+        def filter_function(e: Dict[Text, Any]) -> bool:
+            has_instance = e["event"] == event_type
+            excluded = (e.get("timestamp", 0) or 0) <= (after_timestamp or 0)
+
+            return has_instance and not excluded
+
+        filtered = filter(filter_function, reversed(tracker.applied_events()))
+        for _ in range(skip):
+            next(filtered, None)
+
+        return filtered
 
     def run(
         self,
@@ -351,7 +399,37 @@ class ActionButtonAnswer(Action):
             bot_utterance=bot_utterance, user_utterance=user_utterance
         )
         if disabled:
-            return []
+            return [
+                ActionExecutionRejected(
+                    action_name="action_process_button_answer", timestamp=time.time()
+                )
+            ]
+
+        # store the slot events AFTER the user utterance for slots that have "influence_conversation" set to False:
+        user_timestamp = user_utterance.get("timestamp", 1e50)
+        slot_events = reversed(
+            list(
+                self.get_applied_events_for(
+                    tracker, event_type="slot", after_timestamp=user_timestamp
+                )
+            )
+        )
+        slots_non_inf_conv = []
+        for e in slot_events:
+            # compare to domain
+            """
+            {'event': 'slot',
+            'timestamp': 1635488096.637538,
+            'name': 'topic',
+            'value': 'festnetz'},
+            """
+            name = e.get("name")
+            if name:
+                sl = domain.get("slots").get(name)
+                if sl:
+                    if not sl.get("influence_conversation", True):
+                        slots_non_inf_conv.append(e)
+                        logger.debug(f"influence conversation is false: kept {e} for later use")
 
         # check for extended meta data "button_intents"
         for n, b in enumerate(buttons):
@@ -365,6 +443,7 @@ class ActionButtonAnswer(Action):
                 entities=entities,
             ):
                 # we got a match
+
                 return self._create_events(
                     tracker,
                     dispatcher,
@@ -372,6 +451,14 @@ class ActionButtonAnswer(Action):
                     text=text,
                     orig_intent=intent,
                     user_utterance=user_utterance,
+                    original_entities=[]
+                    if self.delete_entities
+                    else user_utterance.get("parse_data", {}).get(ENTITIES, []),
+                    original_slots=slots_non_inf_conv,
                 )
 
-        return []
+        return [
+            ActionExecutionRejected(
+                action_name="action_process_button_answer", timestamp=time.time()
+            )
+        ]
